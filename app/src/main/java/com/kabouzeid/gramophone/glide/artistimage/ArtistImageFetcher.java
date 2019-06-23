@@ -1,28 +1,26 @@
 package com.kabouzeid.gramophone.glide.artistimage;
 
-import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.media.MediaMetadataRetriever;
-import android.net.Uri;
-import com.bumptech.glide.Priority;
-import com.bumptech.glide.load.data.DataFetcher;
-import com.bumptech.glide.load.model.GlideUrl;
-import com.bumptech.glide.load.model.ModelLoader;
-import com.kabouzeid.gramophone.deezer.rest.DeezerRestClient;
-import com.kabouzeid.gramophone.deezer.rest.model.DeezerArtist;
-import com.kabouzeid.gramophone.deezer.rest.model.DeezerResponse;
-import com.kabouzeid.gramophone.glide.audiocover.AudioFileCoverUtils;
-import com.kabouzeid.gramophone.util.ImageUtil;
-import com.kabouzeid.gramophone.util.MusicUtil;
-import com.kabouzeid.gramophone.util.PreferenceUtil;
-import retrofit2.Response;
+import android.util.Log;
 
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import com.bumptech.glide.Priority;
+import com.bumptech.glide.load.data.DataFetcher;
+import com.kabouzeid.gramophone.glide.audiocover.AudioFileCoverUtils;
+import com.kabouzeid.gramophone.util.ImageUtil;
+import com.kabouzeid.gramophone.util.PreferenceUtil;
+import retrofit2.Response;
 
 /**
  * @author Karim Abou Zeid (kabouzeid)
@@ -30,79 +28,143 @@ import java.util.Map;
 public class ArtistImageFetcher implements DataFetcher<InputStream> {
 
     private final ArtistImage model;
-    private InputStream stream;
-    private Context context;
-
-    private volatile boolean isCancelled;
-
     private final DeezerRestClient deezerRestClient;
     private DataFetcher<InputStream> urlFetcher;
     private ModelLoader<GlideUrl, InputStream> urlLoader;
     private final int width;
     private final int height;
 
+    private InputStream stream;
 
-    public ArtistImageFetcher(final Context context, final ArtistImage model, final DeezerRestClient deezerRestClient, ModelLoader<GlideUrl, InputStream> urlLoader, int width, int height) {
+    private boolean ignoreMediaStore;
+
+    public ArtistImageFetcher(final ArtistImage model, boolean ignoreMediaStore) {
         this.context = context;
         this.model = model;
+        this.ignoreMediaStore = ignoreMediaStore;
         this.deezerRestClient = deezerRestClient;
         this.urlLoader = urlLoader;
         this.width = width;
         this.height = height;
-
     }
 
     @Override
     public String getId() {
-        // makes sure we never ever return null here
-        return String.valueOf(model.artistName);
+        Log.d("MOSAIC", "get id for" + model.artistName);
+        // never return NULL here!
+        // this id is used to determine whether the image is already cached
+        // we use the artist name as well as the album years + file paths
+        return model.toIdString() + "ignoremediastore:" + ignoreMediaStore;
     }
 
     @Override
     public InputStream loadData(Priority priority) throws Exception {
+        Log.d("MOSAIC", "load data for" + model.artistName);
+        return stream = getMosaic(model.albumCovers);
+    }
 
-        if (!MusicUtil.isArtistNameUnknown(model.artistName) && PreferenceUtil.isAllowedToDownloadMetadata(context)) {
+    private InputStream getMosaic(final List<AlbumCover> albumCovers) throws FileNotFoundException {
 
-            final Response<DeezerResponse<DeezerArtist>> response = deezerRestClient.getApiService().getArtistInfo(model.artistName, null).execute();
+        MediaMetadataRetriever retriever = new MediaMetadataRetriever();
 
-            if (!response.isSuccessful()) {
-                throw new IOException("Request failed with code: " + response.code());
+        int artistBitMapSize = 512;
+
+        final Map<InputStream, Integer> images = new HashMap<>();
+
+        InputStream result = null;
+        List<InputStream> streams = new ArrayList<>();
+
+        try {
+            for (final AlbumCover cover : albumCovers) {
+                byte[] picture = null;
+                if (!ignoreMediaStore) {
+                    retriever.setDataSource(cover.getFilePath());
+                    picture = retriever.getEmbeddedPicture();
+                }
+                final InputStream stream;
+                if (picture != null) {
+                    stream = new ByteArrayInputStream(picture);
+                } else {
+                    stream = AudioFileCoverUtils.fallback(cover.getFilePath());
+                }
+
+                if (stream != null) {
+                    images.put(stream, cover.getYear());
+                }
             }
 
-            if (isCancelled) return null;
+            int nbImages = images.size();
 
-            final DeezerResponse<DeezerArtist> deezerResponse = response.body();
+            if (nbImages > 3) {
+                streams = new ArrayList<>(images.keySet());
 
-            if (deezerResponse != null && deezerResponse.getData() != null && deezerResponse.getData().size() > 0) {
+                int divisor = 1;
+                for (int i = 1; i < nbImages && Math.pow(i, 2) <= nbImages; ++i) {
+                    divisor = i;
+                }
+                divisor += 1;
+                double nbTiles = Math.pow(divisor, 2);
 
-                DeezerArtist correctArtist = null;
-                for (final DeezerArtist artist : deezerResponse.getData()) {
-                    if (model.artistName.equalsIgnoreCase(artist.getName())) {
-                        correctArtist = artist;
-                        break;
+                if (nbImages < nbTiles) {
+                    divisor -= 1;
+                    nbTiles = Math.pow(divisor, 2);
+                }
+                final int resize = (artistBitMapSize / divisor) + 1;
+
+                final Bitmap bitmap = Bitmap.createBitmap(artistBitMapSize, artistBitMapSize, Bitmap.Config.RGB_565);
+                final Canvas canvas = new Canvas(bitmap);
+
+                int x = 0;
+                int y = 0;
+
+                for (int i = 0; i < streams.size() && i < nbTiles; ++i) {
+                    final Bitmap bitmap1 = ImageUtil.resize(streams.get(i), resize, resize);
+                    canvas.drawBitmap(bitmap1, x, y, null);
+                    x += resize;
+
+                    if (x >= artistBitMapSize) {
+                        x = 0;
+                        y += resize;
                     }
                 }
 
-                if (correctArtist == null) {
-                    correctArtist = deezerResponse.getData().get(0);
+                final ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                bitmap.compress(Bitmap.CompressFormat.PNG, 0, bos);
+                result = new ByteArrayInputStream(bos.toByteArray());
+
+            } else if (nbImages > 0) {
+                // we return the last cover album of the artist
+                Map.Entry<InputStream, Integer> maxEntryYear = null;
+
+                for (final Map.Entry<InputStream, Integer> entry : images.entrySet()) {
+                    if (maxEntryYear == null || entry.getValue()
+                            .compareTo(maxEntryYear.getValue()) > 0) {
+                        maxEntryYear = entry;
+                    }
                 }
 
-                final String picture_medium = correctArtist.getPicture_medium();
-                GlideUrl url = new GlideUrl(picture_medium);
-
-                final Uri urii = Uri.parse(picture_medium);
-
-                if (!"artist".equals(urii.getPathSegments().get(urii.getPathSegments().size() - 2))) {
-                    urlFetcher = urlLoader.getResourceFetcher(url, width, height);
-                    stream = urlFetcher.loadData(priority);
+                if (maxEntryYear != null) {
+                    result = maxEntryYear.getKey();
+                } else {
+                    result = images.entrySet()
+                            .iterator()
+                            .next()
+                            .getKey();
                 }
+
             }
-        }
+        } finally {
+            retriever.release();
+            try {
+                for (final InputStream stream : streams) {
+                    stream.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
 
-        if (stream == null) {
-            stream = getMosaic(model.albumCovers);
         }
-        return stream;
+        return result;
     }
 
     private InputStream getMosaic(final List<AlbumCover> albumCovers) throws FileNotFoundException {
@@ -205,7 +267,6 @@ public class ArtistImageFetcher implements DataFetcher<InputStream> {
 
     @Override
     public void cleanup() {
-
         // already cleaned up in loadData and ByteArrayInputStream will be GC'd
         if (stream != null) {
             try {
@@ -215,18 +276,10 @@ public class ArtistImageFetcher implements DataFetcher<InputStream> {
             }
         }
 
-
-        if (urlFetcher != null) {
-            urlFetcher.cleanup();
-        }
-
     }
 
     @Override
     public void cancel() {
-        isCancelled = true;
-        if (urlFetcher != null) {
-            urlFetcher.cancel();
-        }
+
     }
 }

@@ -3,7 +3,15 @@ package com.kabouzeid.gramophone.glide;
 import android.content.Context;
 import android.graphics.Bitmap;
 import androidx.annotation.NonNull;
-import com.bumptech.glide.*;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import com.bumptech.glide.BitmapRequestBuilder;
+import com.bumptech.glide.DrawableRequestBuilder;
+import com.bumptech.glide.DrawableTypeRequest;
+import com.bumptech.glide.Priority;
+import com.bumptech.glide.RequestManager;
 import com.bumptech.glide.load.Key;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.load.resource.drawable.GlideDrawable;
@@ -28,7 +36,7 @@ import java.util.List;
  */
 public class ArtistGlideRequest {
 
-    private static final DiskCacheStrategy DEFAULT_DISK_CACHE_STRATEGY = DiskCacheStrategy.SOURCE;
+    private static final DiskCacheStrategy DEFAULT_DISK_CACHE_STRATEGY = DiskCacheStrategy.ALL;
     private static final int DEFAULT_ERROR_IMAGE = R.drawable.default_artist_image;
     public static final int DEFAULT_ANIMATION = android.R.anim.fade_in;
 
@@ -36,7 +44,6 @@ public class ArtistGlideRequest {
         final RequestManager requestManager;
         final Artist artist;
         boolean noCustomImage;
-        boolean forceDownload;
 
         public static Builder from(@NonNull RequestManager requestManager, Artist artist) {
             return new Builder(requestManager, artist);
@@ -60,14 +67,9 @@ public class ArtistGlideRequest {
             return this;
         }
 
-        public Builder forceDownload(boolean forceDownload) {
-            this.forceDownload = forceDownload;
-            return this;
-        }
-
         public DrawableRequestBuilder<GlideDrawable> build() {
             //noinspection unchecked
-            return createBaseRequest(requestManager, artist, noCustomImage, forceDownload)
+            return createBaseRequest(requestManager, artist, noCustomImage)
                     .diskCacheStrategy(DEFAULT_DISK_CACHE_STRATEGY)
                     .error(DEFAULT_ERROR_IMAGE)
                     .animate(DEFAULT_ANIMATION)
@@ -86,7 +88,7 @@ public class ArtistGlideRequest {
 
         public BitmapRequestBuilder<?, Bitmap> build() {
             //noinspection unchecked
-            return createBaseRequest(builder.requestManager, builder.artist, builder.noCustomImage, builder.forceDownload)
+            return createBaseRequest(builder.requestManager, builder.artist, builder.noCustomImage)
                     .asBitmap()
                     .diskCacheStrategy(DEFAULT_DISK_CACHE_STRATEGY)
                     .error(DEFAULT_ERROR_IMAGE)
@@ -108,7 +110,7 @@ public class ArtistGlideRequest {
 
         public BitmapRequestBuilder<?, BitmapPaletteWrapper> build() {
             //noinspection unchecked
-            return createBaseRequest(builder.requestManager, builder.artist, builder.noCustomImage, builder.forceDownload)
+            return createBaseRequest(builder.requestManager, builder.artist, builder.noCustomImage)
                     .asBitmap()
                     .transcode(new BitmapPaletteTranscoder(context), BitmapPaletteWrapper.class)
                     .diskCacheStrategy(DEFAULT_DISK_CACHE_STRATEGY)
@@ -120,7 +122,7 @@ public class ArtistGlideRequest {
         }
     }
 
-    public static DrawableTypeRequest createBaseRequest(RequestManager requestManager, Artist artist, boolean noCustomImage, boolean forceDownload) {
+    public static DrawableTypeRequest createBaseRequest(RequestManager requestManager, Artist artist, boolean noCustomImage) {
         boolean hasCustomImage = CustomArtistImageUtil.getInstance(App.getInstance()).hasCustomArtistImage(artist);
         if (noCustomImage || !hasCustomImage) {
             final List<AlbumCover> songs = new ArrayList<>();
@@ -134,7 +136,7 @@ public class ArtistGlideRequest {
         }
     }
 
-    public static Key createSignature(Artist artist) {
+    private static Key createSignature(Artist artist) {
         return ArtistSignatureUtil.getInstance(App.getInstance()).getArtistSignature(artist.getName());
     }
 }

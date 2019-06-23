@@ -22,6 +22,13 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import butterknife.BindView;
 import butterknife.ButterKnife;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
+import java.util.List;
+import java.util.Locale;
+
 import com.afollestad.materialcab.MaterialCab;
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.afollestad.materialdialogs.util.DialogUtils;
@@ -48,13 +55,11 @@ import com.kabouzeid.gramophone.misc.WrappedAsyncTaskLoader;
 import com.kabouzeid.gramophone.model.Artist;
 import com.kabouzeid.gramophone.model.Song;
 import com.kabouzeid.gramophone.ui.activities.base.AbsSlidingMusicPanelActivity;
-import com.kabouzeid.gramophone.util.*;
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;
-
-import java.util.List;
-import java.util.Locale;
+import com.kabouzeid.gramophone.util.CustomArtistImageUtil;
+import com.kabouzeid.gramophone.util.MusicUtil;
+import com.kabouzeid.gramophone.util.NavigationUtil;
+import com.kabouzeid.gramophone.util.PhonographColorUtil;
+import com.kabouzeid.gramophone.util.PreferenceUtil;
 
 /**
  * Be careful when changing things in this Activity!
@@ -248,7 +253,6 @@ public class ArtistDetailActivity extends AbsSlidingMusicPanelActivity implement
 
     private void loadArtistImage() {
         ArtistGlideRequest.Builder.from(Glide.with(this), artist)
-                .forceDownload(forceDownload)
                 .generatePalette(this).build()
                 .dontAnimate()
                 .into(new PhonographColoredTarget(artistImage) {
@@ -257,7 +261,6 @@ public class ArtistDetailActivity extends AbsSlidingMusicPanelActivity implement
                         setColors(color);
                     }
                 });
-        forceDownload = false;
     }
 
     @Override
@@ -369,7 +372,6 @@ public class ArtistDetailActivity extends AbsSlidingMusicPanelActivity implement
             case R.id.action_reset_artist_image:
                 Toast.makeText(ArtistDetailActivity.this, getResources().getString(R.string.updating), Toast.LENGTH_SHORT).show();
                 CustomArtistImageUtil.getInstance(ArtistDetailActivity.this).resetCustomArtistImage(artist);
-                forceDownload = true;
                 return true;
             case R.id.action_colored_footers:
                 item.setChecked(!item.isChecked());

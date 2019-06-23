@@ -8,6 +8,9 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
+import com.bumptech.glide.Priority;
+import com.bumptech.glide.load.data.DataFetcher;
+
 /**
  * @author Karim Abou Zeid (kabouzeid)
  */
@@ -15,7 +18,10 @@ public class AudioFileCoverFetcher implements DataFetcher<InputStream> {
     private final AudioFileCover model;
     private InputStream stream;
 
+    private InputStream stream;
+
     public AudioFileCoverFetcher(AudioFileCover model) {
+
         this.model = model;
     }
 

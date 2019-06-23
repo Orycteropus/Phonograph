@@ -4,7 +4,6 @@ import android.content.Context;
 import com.bumptech.glide.integration.okhttp3.OkHttpUrlLoader;
 import com.bumptech.glide.load.data.DataFetcher;
 import com.bumptech.glide.load.model.GenericLoaderFactory;
-import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.ModelLoader;
 import com.bumptech.glide.load.model.ModelLoaderFactory;
 import com.bumptech.glide.load.model.stream.StreamModelLoader;
@@ -19,9 +18,6 @@ import java.util.concurrent.TimeUnit;
  */
 
 public class ArtistImageLoader implements StreamModelLoader<ArtistImage> {
-    // we need these very low values to make sure our artist image loading calls doesn't block the image loading queue
-    private static final int TIMEOUT = 700;
-
     private Context context;
     private DeezerRestClient deezerRestClient;
     private ModelLoader<GlideUrl, InputStream> urlLoader;
@@ -35,6 +31,7 @@ public class ArtistImageLoader implements StreamModelLoader<ArtistImage> {
     @Override
     public DataFetcher<InputStream> getResourceFetcher(ArtistImage model, int width, int height) {
         return new ArtistImageFetcher(context, model, deezerRestClient, urlLoader, width, height);
+        return new ArtistImageFetcher(model, PreferenceUtil.getInstance(context).ignoreMediaStoreArtwork());
     }
 
     public static class Factory implements ModelLoaderFactory<ArtistImage, InputStream> {
