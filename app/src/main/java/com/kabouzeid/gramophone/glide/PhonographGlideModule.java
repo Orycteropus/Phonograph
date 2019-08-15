@@ -24,6 +24,6 @@ public class PhonographGlideModule implements GlideModule {
     @Override
     public void registerComponents(Context context, Glide glide) {
         glide.register(AudioFileCover.class, InputStream.class, new AudioFileCoverLoader.Factory());
-        glide.register(ArtistImage.class, InputStream.class, new ArtistImageLoader.Factory());
+        glide.register(ArtistImage.class, InputStream.class, new ArtistImageLoader.Factory(context));
     }
 }

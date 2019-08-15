@@ -44,6 +44,7 @@ public class ArtistGlideRequest {
         final RequestManager requestManager;
         final Artist artist;
         boolean noCustomImage;
+        boolean forceDownload;
 
         public static Builder from(@NonNull RequestManager requestManager, Artist artist) {
             return new Builder(requestManager, artist);
@@ -67,9 +68,14 @@ public class ArtistGlideRequest {
             return this;
         }
 
+        public Builder forceDownload(boolean forceDownload) {
+            this.forceDownload = forceDownload;
+            return this;
+        }
+
         public DrawableRequestBuilder<GlideDrawable> build() {
             //noinspection unchecked
-            return createBaseRequest(requestManager, artist, noCustomImage)
+            return createBaseRequest(requestManager, artist, noCustomImage, forceDownload)
                     .diskCacheStrategy(DEFAULT_DISK_CACHE_STRATEGY)
                     .error(DEFAULT_ERROR_IMAGE)
                     .animate(DEFAULT_ANIMATION)
@@ -88,7 +94,7 @@ public class ArtistGlideRequest {
 
         public BitmapRequestBuilder<?, Bitmap> build() {
             //noinspection unchecked
-            return createBaseRequest(builder.requestManager, builder.artist, builder.noCustomImage)
+            return createBaseRequest(builder.requestManager, builder.artist, builder.noCustomImage, builder.forceDownload)
                     .asBitmap()
                     .diskCacheStrategy(DEFAULT_DISK_CACHE_STRATEGY)
                     .error(DEFAULT_ERROR_IMAGE)
@@ -110,7 +116,7 @@ public class ArtistGlideRequest {
 
         public BitmapRequestBuilder<?, BitmapPaletteWrapper> build() {
             //noinspection unchecked
-            return createBaseRequest(builder.requestManager, builder.artist, builder.noCustomImage)
+            return createBaseRequest(builder.requestManager, builder.artist, builder.noCustomImage, builder.forceDownload)
                     .asBitmap()
                     .transcode(new BitmapPaletteTranscoder(context), BitmapPaletteWrapper.class)
                     .diskCacheStrategy(DEFAULT_DISK_CACHE_STRATEGY)
@@ -122,7 +128,7 @@ public class ArtistGlideRequest {
         }
     }
 
-    public static DrawableTypeRequest createBaseRequest(RequestManager requestManager, Artist artist, boolean noCustomImage) {
+    public static DrawableTypeRequest createBaseRequest(RequestManager requestManager, Artist artist, boolean noCustomImage, boolean forceDownload) {
         boolean hasCustomImage = CustomArtistImageUtil.getInstance(App.getInstance()).hasCustomArtistImage(artist);
         if (noCustomImage || !hasCustomImage) {
             final List<AlbumCover> songs = new ArrayList<>();

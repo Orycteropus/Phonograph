@@ -12,7 +12,7 @@ public class ArtistImage {
     // filePath to get the image of the artist
     public final List<AlbumCover> albumCovers;
 
-    public ArtistImage(String artistName, final List<AlbumCover> albumCovers) {
+    public ArtistImage(String artistName, final boolean skipOkHttpCache, final List<AlbumCover> albumCovers) {
 
         this.artistName = artistName;
         this.albumCovers = albumCovers;
