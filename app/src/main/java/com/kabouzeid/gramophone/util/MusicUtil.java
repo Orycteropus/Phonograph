@@ -6,7 +6,6 @@ import android.net.Uri;
 import android.os.Environment;
 import android.provider.BaseColumns;
 import android.provider.MediaStore;
-import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Toast;
@@ -18,16 +17,16 @@ import com.kabouzeid.gramophone.helper.MusicPlayerRemote;
 import com.kabouzeid.gramophone.loader.PlaylistLoader;
 import com.kabouzeid.gramophone.loader.SongLoader;
 import com.kabouzeid.gramophone.lyric.ViewLyricsSearcher;
-import com.kabouzeid.gramophone.lyric.model.LyricInfo;
-import com.kabouzeid.gramophone.lyric.model.LyricResult;
+import com.kabouzeid.gramophone.lyric.model.Lyric;
 import com.kabouzeid.gramophone.model.*;
 import com.kabouzeid.gramophone.model.lyrics.AbsSynchronizedLyrics;
 import org.jaudiotagger.audio.AudioFileIO;
 import org.jaudiotagger.tag.FieldKey;
 
-import java.io.*;
-import java.net.URL;
-import java.net.URLConnection;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -66,15 +65,14 @@ public class MusicUtil {
     }
 
 
-
     @NonNull
     public static String getArtistInfoString(@NonNull final Context context, @NonNull final Artist artist) {
         int albumCount = artist.getAlbumCount();
         int songCount = artist.getSongCount();
 
         return MusicUtil.buildInfoString(
-            MusicUtil.getAlbumCountString(context, albumCount),
-            MusicUtil.getSongCountString(context, songCount)
+                MusicUtil.getAlbumCountString(context, albumCount),
+                MusicUtil.getSongCountString(context, songCount)
         );
     }
 
@@ -83,16 +81,16 @@ public class MusicUtil {
         int songCount = album.getSongCount();
 
         return MusicUtil.buildInfoString(
-            album.getArtistName(),
-            MusicUtil.getSongCountString(context, songCount)
+                album.getArtistName(),
+                MusicUtil.getSongCountString(context, songCount)
         );
     }
 
     @NonNull
     public static String getSongInfoString(@NonNull final Song song) {
         return MusicUtil.buildInfoString(
-            song.artistName,
-            song.albumName
+                song.artistName,
+                song.albumName
         );
     }
 
@@ -107,8 +105,8 @@ public class MusicUtil {
         final long duration = getTotalDuration(context, songs);
 
         return MusicUtil.buildInfoString(
-            MusicUtil.getSongCountString(context, songs.size()),
-            MusicUtil.getReadableDurationString(duration)
+                MusicUtil.getSongCountString(context, songs.size()),
+                MusicUtil.getReadableDurationString(duration)
         );
     }
 
@@ -149,15 +147,14 @@ public class MusicUtil {
         }
     }
 
-    /** 
+    /**
      * Build a concatenated string from the provided arguments
      * The intended purpose is to show extra annotations
      * to a music library item.
      * Ex: for a given album --> buildInfoString(album.artist, album.songCount)
      */
     @NonNull
-    public static String buildInfoString(@Nullable final String string1, @Nullable final String string2)
-    {
+    public static String buildInfoString(@Nullable final String string1, @Nullable final String string2) {
         // Skip empty strings
         if (TextUtils.isEmpty(string1)) {
             //noinspection ConstantConditions
@@ -388,52 +385,26 @@ public class MusicUtil {
         String res = null;
 
         try {
-            final LyricResult result = ViewLyricsSearcher.search(song.artistName, song.title, 1);
+            final Lyric result = ViewLyricsSearcher.search(song.artistName, song.title, 1);
 
-            if (result != null) {
+            final String lyrics = result.getLyrics();
+            if (lyrics != null) {
 
-                LyricInfo lyricsFound = null;
+                final File storageDir = android.os.Environment.getExternalStorageDirectory();
+                if (song.artistName != null && song.albumName != null) {
 
-                // looking for lrc lyrics first
-                for (LyricInfo lyricInfo : result.getLyricsInfo()) {
-                    final String extension = getExtension(lyricInfo);
-                    if (extension != null && "lrc".equals(extension.toLowerCase().trim())) {
-                        lyricsFound = lyricInfo;
-                        break;
+                    final String directoryName = storageDir.getAbsolutePath() + "/Music/Lyrics/" + song.artistName + "/" + song.albumName;
+                    final File directory = new File(directoryName);
+                    boolean dirExists = true;
+                    if (!directory.exists()) {
+                        dirExists = directory.mkdirs();
+                    }
+                    final String filename = directoryName + "/" + song.title + "." + result.getType();
+                    if (dirExists) {
+                        saveLyrics(lyrics, filename);
                     }
                 }
-
-                // if lrc lyrics not found, looking for txt one
-                if (lyricsFound == null) {
-                    for (LyricInfo lyricInfo : result.getLyricsInfo()) {
-                        final String extension = getExtension(lyricInfo);
-                        if (extension != null && "txt".equals(extension.toLowerCase().trim())) {
-                            lyricsFound = lyricInfo;
-                            break;
-                        }
-                    }
-                }
-
-                if (lyricsFound != null) {
-                    final String lyricsAsString = getTextFromUrl(lyricsFound.getLyricURL());
-
-                    final File storageDir = android.os.Environment.getExternalStorageDirectory();
-                    if (song.artistName != null && song.albumName != null) {
-
-                        final String directoryName = storageDir.getAbsolutePath() + "/Music/Lyrics/" + song.artistName + "/" + song.albumName;
-                        final File directory = new File(directoryName);
-                        boolean dirExists = true;
-                        if (!directory.exists()) {
-                            dirExists = directory.mkdirs();
-                        }
-                        final String filename = directoryName + "/" + song.title + "." + getExtension(lyricsFound);
-                        if (dirExists) {
-                            saveLyrics(lyricsAsString, filename);
-                        }
-                    }
-                    res = lyricsAsString;
-                }
-
+                res = lyrics;
             }
 
         } catch (Exception e) {
@@ -463,36 +434,5 @@ public class MusicUtil {
     private static boolean isExternalStorageWritable() {
         String state = Environment.getExternalStorageState();
         return Environment.MEDIA_MOUNTED.equals(state);
-    }
-
-    private static String getExtension(final LyricInfo lyric) {
-        String extension = null;
-        if (lyric != null) {
-            int i = lyric.getLyricURL().lastIndexOf('.');
-            if (i > 0) {
-                extension = lyric.getLyricURL().substring(i + 1);
-            }
-        }
-        return extension;
-    }
-
-    private static String getTextFromUrl(final String url) throws Exception {
-        final URL website = new URL(url);
-        final URLConnection connection = website.openConnection();
-        final BufferedReader in = new BufferedReader(
-                new InputStreamReader(
-                        connection.getInputStream()));
-
-        final StringBuilder response = new StringBuilder();
-        String inputLine;
-
-        while ((inputLine = in.readLine()) != null) {
-            response.append(inputLine);
-            response.append("\n\r");
-        }
-
-        in.close();
-
-        return response.toString();
     }
 }

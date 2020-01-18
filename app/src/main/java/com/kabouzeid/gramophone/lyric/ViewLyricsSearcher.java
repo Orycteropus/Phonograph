@@ -1,24 +1,20 @@
 package com.kabouzeid.gramophone.lyric;
 
-import android.text.TextUtils;
-import com.kabouzeid.gramophone.lyric.model.LyricInfo;
-import com.kabouzeid.gramophone.lyric.model.LyricResult;
-import org.w3c.dom.Element;
-import org.w3c.dom.NodeList;
-import org.xml.sax.SAXException;
+import com.kabouzeid.gramophone.lyric.model.Lyric;
 
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ViewLyricsSearcher {
 
     private static final String URL = "http://search.crintsoft.com/searchlyrics.htm";
+
+    private static final String SEARCH_LYRICS_URL = "http://search.crintsoft.com/l/";
 
     private static final String clientUserAgent = "MiniLyrics4Android";
 
@@ -36,10 +32,10 @@ public class ViewLyricsSearcher {
      * @param artist artist name
      * @param title  song title
      * @param page   the page
-     * @return a {@link LyricResult}
+     * @return the lyrics
      * @throws Exception an error occured
      */
-    public static LyricResult search(final String artist, final String title, int page) throws Exception {
+    public static Lyric search(final String artist, final String title, int page) throws Exception {
         return searchQuery(String.format(searchQueryBase, artist, title, clientTag + String.format(searchQueryPage, page)));
     }
 
@@ -47,11 +43,11 @@ public class ViewLyricsSearcher {
      * Search method to find Lyrics
      *
      * @param searchQuery the query
-     * @return a {@link LyricResult}
+     * @return the lyrics
      * @throws Exception an error occured
      */
     @SuppressWarnings("resource")
-    private static LyricResult searchQuery(final String searchQuery) throws Exception {
+    private static Lyric searchQuery(final String searchQuery) throws Exception {
         // Create Client
         final URL url = new URL(URL);
         final HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
@@ -79,8 +75,8 @@ public class ViewLyricsSearcher {
             urlConnection.disconnect();
         }
 
-        // Decrypt, parse, store, and return the result list
-        return parseResultXML(decryptResultXML(full));
+        // Decrypt, parse, store, and return the lyrics
+        return retrieveLyrics(decryptResult(full));
     }
 
     /**
@@ -104,8 +100,8 @@ public class ViewLyricsSearcher {
         byte[] pog_md5 = MessageDigest.getInstance("MD5").digest(pog);
 
         int j = 0;
-        for (int i = 0; i < value.length; i++) {
-            j += value[i];
+        for (byte b : value) {
+            j += b;
         }
         int k = (byte) (j / value.length);
 
@@ -134,11 +130,13 @@ public class ViewLyricsSearcher {
         return result.toByteArray();
     }
 
-    /*
-     * Decrypts only the XML from the entire result
+    /**
+     * Decrypt the result
+     *
+     * @param value the value to decrypt
+     * @return the value decrypted
      */
-
-    public static String decryptResultXML(String value) {
+    public static String decryptResult(String value) {
         // Get Magic key value
         char magickey = value.charAt(1);
 
@@ -153,81 +151,63 @@ public class ViewLyricsSearcher {
         return neomagic.toString();
     }
 
-    private static int readIntFromAttr(final Element elem, final String attr, int def) {
-
-        final String data = elem.getAttribute(attr);
-        try {
-            if (!TextUtils.isEmpty(data)) {
-                return Integer.valueOf(data);
-            }
-        } catch (NumberFormatException e) {
-            e.printStackTrace();
-        }
-        return def;
-    }
-
-    private static double readFloatFromAttr(Element elem, String attr, float def) {
-        final String data = elem.getAttribute(attr);
-        try {
-            if (!TextUtils.isEmpty(data))
-                return Double.valueOf(data).doubleValue();
-        } catch (NumberFormatException e) {
-        }
-        return def;
-    }
-
-    private static String readStrFromAttr(Element elem, String attr, String def) {
-        final String data = elem.getAttribute(attr);
-        try {
-            if (!TextUtils.isEmpty(data))
-                return data;
-        } catch (NumberFormatException e) {
-        }
-        return def;
-    }
-
     /**
-     * @param resultXML the XML to parse
-     * @return
-     * @throws SAXException
-     * @throws IOException
-     * @throws ParserConfigurationException
+     * Retrieve the Lyrics
+     *
+     * @param resultToParse the result to parse
+     * @return the lyrics
+     * @throws IOException an error occured
      */
-    public static LyricResult parseResultXML(final String resultXML) throws SAXException, IOException, ParserConfigurationException {
-        final LyricResult result = new LyricResult();
+    public static Lyric retrieveLyrics(String resultToParse) throws IOException {
 
-        // Create array for storing the results
-        final ArrayList<LyricInfo> availableLyrics = new ArrayList<>();
+        final Lyric result = new Lyric();
 
-        // Parse XML
-        final ByteArrayInputStream resultBA = new ByteArrayInputStream(resultXML.getBytes("UTF-8"));
-        final Element resultRootElem = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(resultBA).getDocumentElement();
+        resultToParse = resultToParse.replaceAll("\\x00", "*");
 
-        result.setCurrentPage(readIntFromAttr(resultRootElem, "CurPage", 0));
-        result.setPageCount(readIntFromAttr(resultRootElem, "PageCount", 1));
-        final String server_url = readStrFromAttr(resultRootElem, "server_url", "http://www.viewlyrics.com/");
+        final Pattern patternLrc = Pattern.compile("[a-z0-9/_]*?\\.lrc");
+        final Matcher matcherLrc = patternLrc.matcher(resultToParse);
 
-        final NodeList resultItemList = resultRootElem.getElementsByTagName("fileinfo");
-        for (int i = 0; i < resultItemList.getLength(); i++) {
-            final Element itemElem = (Element) resultItemList.item(i);
-            final LyricInfo itemInfo = new LyricInfo();
+        final Pattern patternTxt = Pattern.compile("[a-z0-9/_]*?\\.txt");
+        final Matcher matcherTxt = patternTxt.matcher(resultToParse);
 
+        final String lrc = matcherLrc.find() ? matcherLrc.group(0) : null;
+        String txt = null;
 
-            itemInfo.setLyricURL(server_url + readStrFromAttr(itemElem, "link", ""));
-            itemInfo.setMusicArtist(readStrFromAttr(itemElem, "artist", ""));
-            itemInfo.setMusicTitle(readStrFromAttr(itemElem, "title", ""));
-            itemInfo.setMusicAlbum(readStrFromAttr(itemElem, "album", ""));
-            itemInfo.setLyricsFileName(readStrFromAttr(itemElem, "filename", ""));
-            itemInfo.setLyricUploader(readStrFromAttr(itemElem, "uploader", ""));
-            itemInfo.setLyricRate(readFloatFromAttr(itemElem, "rate", 0.0F));
-            itemInfo.setLyricRatesCount(readIntFromAttr(itemElem, "ratecount", 0));
-            itemInfo.setLyricDownloadsCount(readIntFromAttr(itemElem, "downloads", 0));
-
-            availableLyrics.add(itemInfo);
+        if (lrc == null) {
+            txt = matcherTxt.find() ? matcherTxt.group(0) : null;
         }
 
-        // Add all founded lyrics founded to result
-        result.setLyricsInfo(availableLyrics);
+        if (lrc != null || txt != null) {
+
+            String type = "txt";
+            String lyric = txt;
+
+            if (txt == null) {
+                type = "lrc";
+                lyric = lrc;
+            }
+
+            result.setType(type);
+            final URL url = new URL(SEARCH_LYRICS_URL + lyric);
+            final HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
+            urlConnection.setRequestMethod("GET");
+
+            if (urlConnection.getResponseCode() == HttpURLConnection.HTTP_OK) {
+                final BufferedReader in = new BufferedReader(new InputStreamReader(
+                        urlConnection.getInputStream()));
+                String inputLine;
+                final StringBuilder response = new StringBuilder();
+
+                while ((inputLine = in.readLine()) != null) {
+                    response.append(inputLine);
+                    response.append("\n\r");
+                }
+                in.close();
+
+                result.setLyrics(response.toString());
+            }
+
+        }
 
         return result;
     }
